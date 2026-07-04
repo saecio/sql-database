@@ -10,46 +10,18 @@ def clean_column_names(df):
     df.columns = df.columns.str.lower().str.replace(" ", "_")
     return df
 
+def drop_blank_order_dates(df):
+    # Drop NaNs
+    df = df[df['order_date'].notna()]
+    # Drop empty or whitespace-only strings
+    return df[df['order_date'].str.strip() != '']
 
-def create_price_columns(df):
+
+def fill_missing_with_zero(df, column_name):
     """
-    Rename the existing price and amount columns and calculate the price
-    per box before discount.
-    """
-    df = df.copy()
-
-    df = df.rename(columns={
-        "price_per_box": "price_per_box_after_discount",
-        "amount": "amount_deprecated"
-    })
-
-    df["discount_pct"] = df["discount_pct"].fillna(0)
-    discount_factor = 1 - df["discount_pct"] / 100
-
-    df["price_per_box_before_discount"] = (
-        df["price_per_box_after_discount"] / discount_factor
-    )
-
-    return df
-
-
-def create_amount_columns(df):
-    """
-    Calculate order amounts before and after discount and the total discount.
-    Negative shipped boxes are retained as returns, producing negative amounts.
+    Replace NaN values in the specified column with 0.
     """
     df = df.copy()
-
-    df["amount_before_discount"] = (
-        df["price_per_box_before_discount"] * df["boxes_shipped"]
-    ).round(2)
-
-    df["amount_after_discount"] = (
-        df["price_per_box_after_discount"] * df["boxes_shipped"]
-    ).round(2)
-
-    df["total_discount"] = (
-        df["amount_before_discount"] - df["amount_after_discount"]
-    ).round(2)
-
+    df[column_name] = df[column_name].fillna(0)
     return df
+
