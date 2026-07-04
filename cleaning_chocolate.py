@@ -45,9 +45,9 @@ def create_price_columns(df):
 
     return df
 
-def create_amount_columns(df):
+def create_amount_columns_without_total(df):
     """
-    Calculate order amounts before and after discount and the total discount.
+    Calculate order amounts before and after discount, but NOT total_discount.
     Negative shipped boxes are retained as returns, producing negative amounts.
     """
     df = df.copy()
@@ -59,6 +59,15 @@ def create_amount_columns(df):
     df["amount_after_discount"] = (
         df["price_per_box_after_discount"] * df["boxes_shipped"]
     ).round(2)
+
+    return df
+
+def compute_total_discount(df):
+    """
+    Compute total_discount from amount_before_discount and amount_after_discount.
+    Assumes those columns are already present and (optionally) imputed.
+    """
+    df = df.copy()
 
     df["total_discount"] = (
         df["amount_before_discount"] - df["amount_after_discount"]
