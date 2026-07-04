@@ -74,3 +74,64 @@ def compute_total_discount(df):
     ).round(2)
 
     return df
+    
+def split_into_tables(df):
+    """
+    Split the cleaned DataFrame into 3 normalized tables:
+      - products: one row per unique product, with a generated product_id (PK)
+      - salespersons: one row per unique salesperson, with a generated salesperson_id (PK)
+      - invoices: one row per order, with foreign keys pointing to products and salespersons
+
+    Returns a tuple: (products, salespersons, invoices)
+    """
+    df = df.copy()
+
+    # --- Table: products ---
+    products = (
+        df[["product"]]
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+    products.insert(0, "product_id", products.index + 1)
+
+    # --- Table: salespersons ---
+    salespersons = (
+        df[["salesperson"]]
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+    salespersons.insert(0, "salesperson_id", salespersons.index + 1)
+
+    # --- Table: invoices ---
+    invoices = df.merge(products, on="product", how="left")
+    invoices = invoices.merge(salespersons, on="salesperson", how="left")
+    invoices = invoices.drop(columns=["product", "salesperson", "amount_deprecated"])
+
+    # Move foreign keys just after order_id for readability
+    cols = invoices.columns.tolist()
+    fk_cols = ["product_id", "salesperson_id"]
+    other_cols = [c for c in cols if c not in fk_cols]
+    invoices = invoices[other_cols[:1] + fk_cols + other_cols[1:]]
+
+    return products, salespersons, invoices
+
+def export_tables(products, salespersons, invoices, output_dir="data/clean"):
+    """
+    Export the 3 tables to CSV files in the given output directory.
+    Import order for MySQL:
+      1. products.csv       (no foreign keys)
+      2. salespersons.csv   (no foreign keys)
+      3. invoices.csv       (references both tables above)
+    """
+    import os
+    os.makedirs(output_dir, exist_ok=True)
+
+    products.to_csv(f"{output_dir}/products.csv", index=False)
+    salespersons.to_csv(f"{output_dir}/salespersons.csv", index=False)
+    invoices.to_csv(f"{output_dir}/invoices.csv", index=False)
+
+    print(f"products.csv     — {len(products)} rows")
+    print(f"salespersons.csv — {len(salespersons)} rows")
+    print(f"invoices.csv     — {len(invoices)} rows")
+    print(f"Files saved to: {output_dir}/")
+    
