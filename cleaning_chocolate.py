@@ -75,45 +75,100 @@ def compute_total_discount(df):
 
     return df
     
-def split_into_tables(df):
+def impute_missing_by_group(df, columns, group_col="product"):
     """
-    Split the cleaned DataFrame into 3 normalized tables:
-      - products: one row per unique product, with a generated product_id (PK)
-      - salespersons: one row per unique salesperson, with a generated salesperson_id (PK)
-      - invoices: one row per order, with foreign keys pointing to products and salespersons
-
-    Returns a tuple: (products, salespersons, invoices)
+    Fill missing values in `columns` with the median of their group
+    (defined by group_col). Used to impute price/amount gaps per product
+    before computing total_discount.
     """
     df = df.copy()
+    for col in columns:
+        if col in df.columns:
+            df[col] = df.groupby(group_col)[col].transform(lambda x: x.fillna(x.median()))
+    return df
 
-    # --- Table: products ---
-    products = (
-        df[["product"]]
-        .drop_duplicates()
-        .reset_index(drop=True)
+
+def convert_order_date_dtype(df):
+    """
+    Convert order_date from string to datetime, so it exports as a proper
+    DATE type for MySQL rather than text. Dates are in mixed formats, so we use format="mixed" to handle both "YYYY-MM-DD" and "MM/DD/YYYY" formats.
+    """
+    df = df.copy()
+    df["order_date"] = pd.to_datetime(df["order_date"], format="mixed", dayfirst=False)
+    return df
+
+
+def compute_product_price_stats(df):
+    """
+    Descriptive price stats per product from price_per_box_before_discount.
+    Used to inspect the original algebraically-derived prices before they
+    are overridden with market-standard reference values.
+    """
+    return (
+        df.groupby("product")["price_per_box_before_discount"]
+        .agg(["median", "mean", "min", "max", "std", "count"])
+        .round(2)
+        .reset_index()
     )
-    products.insert(0, "product_id", products.index + 1)
 
-    # --- Table: salespersons ---
-    salespersons = (
-        df[["salesperson"]]
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
-    salespersons.insert(0, "salesperson_id", salespersons.index + 1)
 
-    # --- Table: invoices ---
-    invoices = df.merge(products, on="product", how="left")
-    invoices = invoices.merge(salespersons, on="salesperson", how="left")
-    invoices = invoices.drop(columns=["product", "salesperson", "amount_deprecated"])
+def build_products_table(df, price_mapping):
+    """
+    Build the products table: one row per product, surrogate product_id,
+    and a market-standard reference price from price_mapping (since the
+    original price_per_box was confirmed to be randomly generated).
+    """
+    products = compute_product_price_stats(df)
+    products["price"] = products["product"].map(price_mapping)
+    products.insert(0, "product_id", range(1, len(products) + 1))
+    return products[["product_id", "product", "price"]]
 
-    # Move foreign keys just after order_id for readability
-    cols = invoices.columns.tolist()
-    fk_cols = ["product_id", "salesperson_id"]
-    other_cols = [c for c in cols if c not in fk_cols]
-    invoices = invoices[other_cols[:1] + fk_cols + other_cols[1:]]
 
-    return products, salespersons, invoices
+def build_salespersons_table(df):
+    """
+    Build the salespersons table: one row per unique salesperson,
+    with a surrogate salesperson_id.
+    """
+    salespersons = df[["salesperson"]].drop_duplicates().reset_index(drop=True)
+    salespersons.insert(0, "salesperson_id", range(1, len(salespersons) + 1))
+    return salespersons[["salesperson_id", "salesperson"]]
+
+
+def build_invoices_table(df, products, salespersons):
+    """
+    Build the invoices table. Price/amount columns are recalculated from
+    the market-standard product price (not the original price_per_box),
+    since that field was confirmed to be randomly generated.
+    """
+    invoices = df.copy()
+
+    invoices = invoices.merge(products[["product_id", "product", "price"]], on="product", how="left")
+    invoices = invoices.merge(salespersons[["salesperson_id", "salesperson"]], on="salesperson", how="left")
+
+    invoices["price_per_box_before_discount"] = invoices["price"].round(2)
+    invoices["price_per_box_after_discount"] = (
+        invoices["price_per_box_before_discount"] * (1 - invoices["discount_pct"] / 100)
+    ).round(2)
+    invoices["amount_before_discount"] = (
+        invoices["price_per_box_before_discount"] * invoices["boxes_shipped"]
+    ).round(2)
+    invoices["amount_after_discount"] = (
+        invoices["price_per_box_after_discount"] * invoices["boxes_shipped"]
+    ).round(2)
+    invoices["total_discount"] = (
+        invoices["amount_before_discount"] - invoices["amount_after_discount"]
+    ).round(2)
+
+    drop_cols = [c for c in ["product", "salesperson", "price", "amount_deprecated"] if c in invoices.columns]
+    invoices = invoices.drop(columns=drop_cols)
+
+    cols = [
+        "order_id", "product_id", "salesperson_id", "country", "channel",
+        "order_date", "discount_pct", "marketing_spend", "boxes_shipped",
+        "price_per_box_before_discount", "price_per_box_after_discount",
+        "amount_before_discount", "amount_after_discount", "total_discount",
+    ]
+    return invoices[cols]
 
 def export_tables(products, salespersons, invoices, output_dir="data/clean"):
     """
