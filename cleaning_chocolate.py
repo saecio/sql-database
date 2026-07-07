@@ -90,13 +90,12 @@ def impute_missing_by_group(df, columns, group_col="product"):
 
 def convert_order_date_dtype(df):
     """
-    Convert order_date from string to datetime, so it exports as a proper
+    Convert order_date from string to a date, so it exports as a proper
     DATE type for MySQL rather than text. Dates are in mixed formats, so we use format="mixed" to handle both "YYYY-MM-DD" and "MM/DD/YYYY" formats.
     """
     df = df.copy()
-    df["order_date"] = pd.to_datetime(df["order_date"], format="mixed", dayfirst=False)
+    df["order_date"] = pd.to_datetime(df["order_date"], format="mixed", dayfirst=False).dt.date
     return df
-
 
 def compute_product_price_stats(df):
     """
