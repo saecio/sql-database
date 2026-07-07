@@ -169,6 +169,10 @@ def build_invoices_table(df, products, salespersons):
         "amount_before_discount", "amount_after_discount", "total_discount",
     ]
     return invoices[cols]
+    
+import os
+
+print("Répertoire courant :", os.getcwd())
 
 def export_tables(products, salespersons, invoices, output_dir="data/clean"):
     """
