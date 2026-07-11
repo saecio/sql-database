@@ -4,10 +4,10 @@ This project uses a chocolate sales dataset to clean the data, organize it into 
 
 The project is based on the file `Chocolate_Sales.csv`.
 
-The information comes from Kaggle:
-https://www.kaggle.com/datasets/arjunmehta1992/chocolate-sales-in-20222023/data
+The information comes from [Kaggle](https://www.kaggle.com/datasets/arjunmehta1992/chocolate-sales-in-20222023/data).
 
-There is also a PowerPoint presentation that explains the project and analysis further.
+There is also a [PowerPoint presentation](https://docs.google.com/presentation/d/1vqP3iNr33XnmzKCvtx8ezJWh8Y4beNrO/edit?slide=id.p1#slide=id.p1) that explains the project and analysis further.
+
 
 ## Files
 
